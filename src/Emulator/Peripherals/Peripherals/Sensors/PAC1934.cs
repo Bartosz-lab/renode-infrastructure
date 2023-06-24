@@ -427,15 +427,16 @@ namespace Antmicro.Renode.Peripherals.Sensors
                 // populate the registers with dummy data
                 var randomizer = EmulationManager.Instance.CurrentEmulation.RandomGenerator;
 
-                proportionalPower = SampleBusVoltage * SampleSenseResistorVoltage;
-                if(refresh == RefreshType.WithAccumulators)
-                {
-                    proportionalPowerAccumulator += proportionalPower;
-                }
                 busVoltage = (ushort)(SampleBusVoltage + randomizer.Next(-20, 20));
                 senseResistorVoltage = (ushort)(SampleSenseResistorVoltage + randomizer.Next(-20, 20));
                 averageBusVoltage = GetAverage(vBusQueue, busVoltage);
                 senseResistorAverageVoltage = GetAverage(vSenseQueue, senseResistorVoltage);
+
+                proportionalPower = busVoltage * senseResistorVoltage;
+                if(refresh == RefreshType.WithAccumulators)
+                {
+                    proportionalPowerAccumulator += proportionalPower;
+                }
             }
 
             public void RefreshInactiveChannel(RefreshType refresh)
