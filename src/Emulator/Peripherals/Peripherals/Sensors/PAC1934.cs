@@ -63,13 +63,22 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
         public byte[] Read(int count = 1)
         {
-            // we do not use `count` due to block read operations
-            if(state == State.NoRegisterContext)
+            byte[] res = new byte[0];
+            while(res.Length < count)
             {
-                this.Log(LogLevel.Warning, "Trying to read but no register is selected");
-                return new byte[] { 0 };
+                byte[] bytes = ReadRegister((uint)context);
+
+                // model should send data as big endian
+                if (BitConverter.IsLittleEndian)
+                    Array.Reverse(bytes);
+
+                res = res.Concat(bytes).ToArray();
+                this.Log(LogLevel.Noisy, "Read byte tab: [{0}] from {1}", 
+                            BitConverter.ToString(bytes), 
+                            context);
+                context = NextReadRegister(context);
             }
-            return ReadRegister((uint)context);
+            return res;
         }
 
         public void Write(byte[] data)
@@ -91,17 +100,15 @@ namespace Antmicro.Renode.Peripherals.Sensors
                 {
                     this.Log(LogLevel.Noisy, "Write byte: 0x{0:X} to {1}", elem, context);
                     registers.Write((long)context, elem);
-                    context = NextRegister(context);
+                    context = NextWriteRegister(context);
                     
                 }
             }
-            state = State.RegisterContextSet;
         }
 
         public void Reset()
         {
             accumulatorCount = 0;
-            state = default(State);
             context = default(Registers);
             for(var i = 0; i < ChannelCount; ++i)
             {
@@ -110,7 +117,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
             registers.Reset();
         }
 
-        private Registers NextRegister(Registers register)
+        private Registers NextWriteRegister(Registers register)
         {
             switch(register)
             {
@@ -127,10 +134,202 @@ namespace Antmicro.Renode.Peripherals.Sensors
                     return register;
             }
         }
+        private Registers NextReadRegister(Registers register)
+        {
+            if(register >= Registers.ProportionalPowerAccumulator1 && register <= Registers.ProportionalPower4)
+            {
+                uint channelNumber = ((uint)register - 3) % 4;
+
+                // If Skip is on and channel is disabled make loop to self
+                if(skipInactiveChannels.Value && channels[channelNumber].IsChannelDisabled.Value)
+                {
+                    return register;
+                }
+            }
+
+            switch(register)
+            {
+                case Registers.Control:
+                    return Registers.AccumulatorCount;
+                case Registers.AccumulatorCount:
+                    if(!skipInactiveChannels.Value || !channels[0].IsChannelDisabled.Value)
+                    {
+                        return Registers.ProportionalPowerAccumulator1;
+                    }
+                    goto case Registers.ProportionalPowerAccumulator1;
+                case Registers.ProportionalPowerAccumulator1:
+                    if(!skipInactiveChannels.Value || !channels[1].IsChannelDisabled.Value)
+                    {
+                        return Registers.ProportionalPowerAccumulator2;
+                    }
+                    goto case Registers.ProportionalPowerAccumulator2;
+                case Registers.ProportionalPowerAccumulator2:
+                    if(!skipInactiveChannels.Value || !channels[2].IsChannelDisabled.Value)
+                    {
+                        return Registers.ProportionalPowerAccumulator3;
+                    }
+                    goto case Registers.ProportionalPowerAccumulator3;
+                case Registers.ProportionalPowerAccumulator3:
+                    if(!skipInactiveChannels.Value || !channels[3].IsChannelDisabled.Value)
+                    {
+                        return Registers.ProportionalPowerAccumulator4;
+                    }
+                    goto case Registers.ProportionalPowerAccumulator4;
+                case Registers.ProportionalPowerAccumulator4:
+                    if(!skipInactiveChannels.Value || !channels[0].IsChannelDisabled.Value)
+                    {
+                        return Registers.BusVoltage1;
+                    }
+                    goto case Registers.BusVoltage1;
+                case Registers.BusVoltage1:
+                    if(!skipInactiveChannels.Value || !channels[1].IsChannelDisabled.Value)
+                    {
+                        return Registers.BusVoltage2;
+                    }
+                    goto case Registers.BusVoltage2;
+                case Registers.BusVoltage2:
+                    if(!skipInactiveChannels.Value || !channels[2].IsChannelDisabled.Value)
+                    {
+                        return Registers.BusVoltage3;
+                    }
+                    goto case Registers.BusVoltage3;
+                case Registers.BusVoltage3:
+                    if(!skipInactiveChannels.Value || !channels[3].IsChannelDisabled.Value)
+                    {
+                        return Registers.BusVoltage4;
+                    }
+                    goto case Registers.BusVoltage4;
+                case Registers.BusVoltage4:
+                    if(!skipInactiveChannels.Value || !channels[0].IsChannelDisabled.Value)
+                    {
+                        return Registers.SenseResistorVoltage1;
+                    }
+                    goto case Registers.SenseResistorVoltage1;
+                case Registers.SenseResistorVoltage1:
+                    if(!skipInactiveChannels.Value || !channels[1].IsChannelDisabled.Value)
+                    {
+                        return Registers.SenseResistorVoltage2;
+                    }
+                    goto case Registers.SenseResistorVoltage2;
+                case Registers.SenseResistorVoltage2:
+                    if(!skipInactiveChannels.Value || !channels[2].IsChannelDisabled.Value)
+                    {
+                        return Registers.SenseResistorVoltage3;
+                    }
+                    goto case Registers.SenseResistorVoltage3;
+                case Registers.SenseResistorVoltage3:
+                    if(!skipInactiveChannels.Value || !channels[3].IsChannelDisabled.Value)
+                    {
+                        return Registers.SenseResistorVoltage4;
+                    }
+                    goto case Registers.SenseResistorVoltage4;
+                case Registers.SenseResistorVoltage4:
+                    if(!skipInactiveChannels.Value || !channels[0].IsChannelDisabled.Value)
+                    {
+                        return Registers.AverageBusVoltage1;
+                    }
+                    goto case Registers.ProportionalPowerAccumulator1;
+                case Registers.AverageBusVoltage1:
+                    if(!skipInactiveChannels.Value || !channels[1].IsChannelDisabled.Value)
+                    {
+                        return Registers.AverageBusVoltage2;
+                    }
+                    goto case Registers.AverageBusVoltage2;
+                case Registers.AverageBusVoltage2:
+                    if(!skipInactiveChannels.Value || !channels[2].IsChannelDisabled.Value)
+                    {
+                        return Registers.AverageBusVoltage3;
+                    }
+                    goto case Registers.AverageBusVoltage3;
+                case Registers.AverageBusVoltage3:
+                    if(!skipInactiveChannels.Value || !channels[3].IsChannelDisabled.Value)
+                    {
+                        return Registers.AverageBusVoltage4;
+                    }
+                    goto case Registers.AverageBusVoltage4;
+                case Registers.AverageBusVoltage4:
+                    if(!skipInactiveChannels.Value || !channels[0].IsChannelDisabled.Value)
+                    {
+                        return Registers.SenseResistorAverageVoltage1;
+                    }
+                    goto case Registers.SenseResistorAverageVoltage1;
+                case Registers.SenseResistorAverageVoltage1:
+                    if(!skipInactiveChannels.Value || !channels[1].IsChannelDisabled.Value)
+                    {
+                        return Registers.SenseResistorAverageVoltage2;
+                    }
+                    goto case Registers.SenseResistorAverageVoltage2;
+                case Registers.SenseResistorAverageVoltage2:
+                    if(!skipInactiveChannels.Value || !channels[2].IsChannelDisabled.Value)
+                    {
+                        return Registers.SenseResistorAverageVoltage3;
+                    }
+                    goto case Registers.SenseResistorAverageVoltage3;
+                case Registers.SenseResistorAverageVoltage3:
+                    if(!skipInactiveChannels.Value || !channels[3].IsChannelDisabled.Value)
+                    {
+                        return Registers.SenseResistorAverageVoltage4;
+                    }
+                    goto case Registers.SenseResistorAverageVoltage4;
+                case Registers.SenseResistorAverageVoltage4:
+                    if(!skipInactiveChannels.Value || !channels[0].IsChannelDisabled.Value)
+                    {
+                        return Registers.ProportionalPower1;
+                    }
+                    goto case Registers.ProportionalPower1;
+                case Registers.ProportionalPower1:
+                    if(!skipInactiveChannels.Value || !channels[1].IsChannelDisabled.Value)
+                    {
+                        return Registers.ProportionalPower2;
+                    }
+                    goto case Registers.ProportionalPower2;
+                case Registers.ProportionalPower2:
+                    if(!skipInactiveChannels.Value || !channels[2].IsChannelDisabled.Value)
+                    {
+                        return Registers.ProportionalPower3;
+                    }
+                    goto case Registers.ProportionalPower3;
+                case Registers.ProportionalPower3:
+                    if(!skipInactiveChannels.Value || !channels[3].IsChannelDisabled.Value)
+                    {
+                        return Registers.ProportionalPower4;
+                    }
+                    goto case Registers.ProportionalPower4;
+                case Registers.ProportionalPower4:
+                    return Registers.ChannelDisable;
+                case Registers.ChannelDisable:
+                    return Registers.BidirectionalCurrentMeasurement;
+                case Registers.BidirectionalCurrentMeasurement:
+                    return Registers.SlowMode;
+                case Registers.SlowMode:
+                    return Registers.ControlImage;
+                case Registers.ControlImage:
+                    return Registers.ChannelDisableImage;
+                case Registers.ChannelDisableImage:
+                    return Registers.BidirectionalCurrentMeasurementImage;
+                case Registers.BidirectionalCurrentMeasurementImage:
+                    return Registers.ControlPreviousImage;
+                case Registers.ControlPreviousImage:
+                    return Registers.ChannelDisablePreviousImage;
+                case Registers.ChannelDisablePreviousImage:
+                    return Registers.BidirectionalCurrentMeasurementPreviousImage;
+                case Registers.BidirectionalCurrentMeasurementPreviousImage:
+                    return Registers.ProductId;
+                case Registers.ProductId:
+                    return Registers.ManufacturerId;
+                case Registers.ManufacturerId:
+                    return Registers.RevisionId;
+                case Registers.RevisionId:
+                    return Registers.Control;
+                    
+                default:
+                    this.Log(LogLevel.Warning, "Trying to read write only register: {0}", register);
+                    return register;
+            }
+        }
 
         private byte[] ReadRegister(uint offset)
         {
-            state = State.NoRegisterContext;
             if(offset >= (uint)Registers.ProportionalPowerAccumulator1 && offset <= (uint)Registers.ProportionalPower4)
             {
                 var channelNumber = (offset - 3) % 4;
@@ -140,7 +339,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
             {
                 return BitConverter.GetBytes(accumulatorCount);
             }
-            return BitConverter.GetBytes(registers.Read(offset));
+            return new[] {(byte)registers.Read(offset)};
         }
 
         private void RefreshChannels(RefreshType refresh)
@@ -159,7 +358,6 @@ namespace Antmicro.Renode.Peripherals.Sensors
             }
         }
 
-        private State state;
         private Registers context;
         private uint accumulatorCount;
 
@@ -168,9 +366,9 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
         private readonly IFlagRegisterField skipInactiveChannels;
 
-        private const int ProductId = 0x5B;
-        private const int ManufacturerId = 0x5D;
-        private const int RevisionId = 0x3;
+        private const byte ProductId = 0x5B;
+        private const byte ManufacturerId = 0x5D;
+        private const byte RevisionId = 0x3;
 
         private const int ChannelCount = 4;
         private const int ShiftBetweenChannelRegisters = 4;
@@ -190,7 +388,14 @@ namespace Antmicro.Renode.Peripherals.Sensors
                 switch(offset)
                 {
                     case (long)Registers.ProportionalPowerAccumulator1:
-                        return BitConverter.GetBytes(proportionalPowerAccumulator);
+                        // this field has 6 bytes
+                        byte[] bytes = BitConverter.GetBytes(proportionalPowerAccumulator);
+                        
+                        if (BitConverter.IsLittleEndian)
+                            bytes = bytes.Take(bytes.Length-2).ToArray();
+                        else
+                            bytes = bytes.Skip(2).ToArray();
+                        return bytes;
                     case (long)Registers.BusVoltage1:
                         return BitConverter.GetBytes(busVoltage);
                     case (long)Registers.SenseResistorVoltage1:
@@ -326,13 +531,6 @@ namespace Antmicro.Renode.Peripherals.Sensors
             ProductId = 0xFD,
             ManufacturerId = 0xFE,
             RevisionId = 0xFF
-        }
-
-        private enum State : byte
-        {
-            NoRegisterContext = 0,
-            RegisterContextSet = 1,
-            RefreshContext = 2
         }
 
         private enum RefreshType : byte
