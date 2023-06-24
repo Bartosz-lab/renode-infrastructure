@@ -6,6 +6,7 @@
 //  Full license text is available in 'licenses/MIT.txt'.
 //
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using Antmicro.Renode.Core;
 using Antmicro.Renode.Core.Structure.Registers;
@@ -73,17 +74,28 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
         public void Write(byte[] data)
         {
-            // TODO: implement the auto-incrementing pointer described in the docs
-            if(state == State.NoRegisterContext)
+            // First byte is always Command/Address
+            context = (Registers)data[0];
+            this.Log(LogLevel.Noisy, "First Write to: {0}", context);
+            if(context == Registers.Refresh || context == Registers.RefreshG)
             {
-                context = (Registers)data[0];
-                state = GetStateBasedOnContext(context);
-                if(state != State.RefreshContext)
+                RefreshChannels(RefreshType.WithAccumulators);
+            }
+            else if (context == Registers.RefreshV)
+            {
+                RefreshChannels(RefreshType.NoAccumulators);
+            } 
+            else 
+            {
+                foreach(byte elem in data.Skip(1))
                 {
-                    return;
+                    this.Log(LogLevel.Noisy, "Write byte: 0x{0:X} to {1}", elem, context);
+                    registers.Write((long)context, elem);
+                    context = NextRegister(context);
+                    
                 }
             }
-            WriteRegister(context, data[0]);
+            state = State.RegisterContextSet;
         }
 
         public void Reset()
@@ -98,22 +110,22 @@ namespace Antmicro.Renode.Peripherals.Sensors
             registers.Reset();
         }
 
-        private void WriteRegister(Registers register, byte data)
+        private Registers NextRegister(Registers register)
         {
             switch(register)
             {
-                case Registers.Refresh:
-                case Registers.RefreshG:
-                    RefreshChannels(RefreshType.WithAccumulators);
-                    break;
-                case Registers.RefreshV:
-                    RefreshChannels(RefreshType.NoAccumulators);
-                    break;
+                case Registers.Control:
+                    return Registers.ChannelDisable;
+                case Registers.ChannelDisable:
+                    return Registers.BidirectionalCurrentMeasurement;
+                case Registers.BidirectionalCurrentMeasurement:
+                    return Registers.SlowMode;
+                case Registers.SlowMode:
+                    return Registers.Control;
                 default:
-                    registers.Write((long)register, data);
-                    break;
+                    this.Log(LogLevel.Warning, "Trying to write to read only register: {0}", register);
+                    return register;
             }
-            state = State.NoRegisterContext;
         }
 
         private byte[] ReadRegister(uint offset)
@@ -145,15 +157,6 @@ namespace Antmicro.Renode.Peripherals.Sensors
                     accumulatorCount += (refresh == RefreshType.WithAccumulators ? 1u : 0);
                 }
             }
-        }
-
-        private State GetStateBasedOnContext(Registers data)
-        {
-            if(data == Registers.Refresh || data == Registers.RefreshG || data == Registers.RefreshV)
-            {
-                return State.RefreshContext;
-            }
-            return State.RegisterContextSet;
         }
 
         private State state;
