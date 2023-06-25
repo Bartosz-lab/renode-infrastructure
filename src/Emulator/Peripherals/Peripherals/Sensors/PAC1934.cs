@@ -432,7 +432,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
                 averageBusVoltage = GetAverage(vBusQueue, busVoltage);
                 senseResistorAverageVoltage = GetAverage(vSenseQueue, senseResistorVoltage);
 
-                proportionalPower = busVoltage * senseResistorVoltage;
+                proportionalPower = (uint)busVoltage * (uint)senseResistorVoltage;
                 if(refresh == RefreshType.WithAccumulators)
                 {
                     proportionalPowerAccumulator += proportionalPower;
